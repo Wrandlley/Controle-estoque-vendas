@@ -62,10 +62,6 @@
         <!-- Área principal onde o conteúdo das telas é renderizado -->
         <main class="content-panel" id="contentPanel" aria-live="polite"></main>
 
-        <!-- Botão de reset geral do sistema -->
-        <div class="footer-actions">
-            <button class="danger-btn" id="btnResetarDados" type="button">Resetar dados</button>
-        </div>
     </div>
 
     <script>
@@ -184,22 +180,6 @@
             } catch {
                 console.warn('Não foi possível salvar os pedidos no navegador.');
             }
-        }
-
-        function resetarDados() {
-            const confirmar = window.confirm('Tem certeza que deseja resetar todos os dados? Isso apagará estoque e pedidos salvos.');
-            if (!confirmar) return;
-
-            const estoqueResetado = [];
-            const estadoResetado = {
-                nextPedidoId: 1,
-                pedidos: []
-            };
-
-            localStorage.setItem(ESTOQUE_KEY, JSON.stringify(estoqueResetado));
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(estadoResetado));
-
-            window.location.reload();
         }
 
         const estado = carregarEstado();
@@ -459,7 +439,12 @@
                                             <td><input class="inventory-input" type="number" min="0" data-index="${index}" data-field="quantidade" value="${item.quantidade}" /></td>
                                             <td><input class="inventory-input" type="text" data-index="${index}" data-field="local" value="${item.local}" /></td>
                                             <td><span class="status ${status.classe}">${status.texto}</span></td>
-                                            <td><button class="primary-btn small-btn save-item-btn" type="button" data-index="${index}">Salvar</button></td>
+                                            <td class="inventory-actions">
+                                                <div class="inventory-row-actions">
+                                                    <button class="remove-item-btn" type="button" data-index="${index}" aria-label="Remover ${item.produto}" title="Remover item">-</button>
+                                                    <button class="primary-btn small-btn save-item-btn" type="button" data-index="${index}">Salvar</button>
+                                                </div>
+                                            </td>
                                         </tr>
                                     `;
                                 }).join('')}
@@ -493,6 +478,22 @@
                             valor: Number(estoque[index].valor || 0)
                         };
 
+                        salvarEstoque();
+                        renderSection('inventario');
+                    });
+                });
+
+                document.querySelectorAll('.remove-item-btn').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const index = Number(button.dataset.index);
+                        const item = estoque[index];
+                        if (!item) return;
+
+                        const confirmar = window.confirm(`Remover "${item.produto}" do inventário?`);
+                        if (!confirmar) return;
+
+                        estoque.splice(index, 1);
+                        normalizarCodigosEstoque();
                         salvarEstoque();
                         renderSection('inventario');
                     });
@@ -799,8 +800,6 @@
         cards.forEach(card => {
             card.addEventListener('click', () => renderSection(card.dataset.section));
         });
-
-        document.getElementById('btnResetarDados').addEventListener('click', resetarDados);
 
         renderSection('painel');
     </script>
