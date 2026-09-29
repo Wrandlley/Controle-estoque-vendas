@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de estoque e vendas</title>
+    <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+    <!-- div class="container">  !titulo do projeto -->
+    <div class="container">
+        <!-- Header principal do sistema -->
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-badge">📦</div>
+                <div>
+                    <h1>Controle de estoque e vendas</h1>
+                </div>
+            </div>
+            <div class="status-pill">Sistema ativo</div>
+        </header>
+
+        <!-- Menu principal com navegação das páginas -->
+        <nav class="nav-grid" aria-label="Menu principal">
+            <button class="nav-card active" type="button" data-section="painel">
+                <div class="nav-icon">📊</div>
+                <h2>Painel</h2>
+                <p>Resumo geral dos pedidos e status do sistema.</p>
+            </button>
+
+            <button class="nav-card" type="button" data-section="vendas">
+                <div class="nav-icon">📈</div>
+                <h2>Resumo de vendas</h2>
+                <p>Gráficos e métricas do desempenho de vendas.</p>
+            </button>
+
+            <button class="nav-card" type="button" data-section="inventario">
+                <div class="nav-icon">📋</div>
+                <h2>Inventário</h2>
+                <p>Visualize todos os itens cadastrados no estoque.</p>
+            </button>
+
+            <button class="nav-card" type="button" data-section="venda">
+                <div class="nav-icon">🧾</div>
+                <h2>Venda</h2>
+                <p>Selecione os itens e quantidades para preparar a saída.</p>
+            </button>
+
+            <button class="nav-card" type="button" data-section="conferencia">
+                <div class="nav-icon">✅</div>
+                <h2>Conferência</h2>
+                <p>Veja os itens selecionados para saída do estoque.</p>
+            </button>
+
+            <button class="nav-card" type="button" data-section="cadastro">
+                <div class="nav-icon">➕</div>
+                <h2>Cadastro</h2>
+                <p>Cadastre novos produtos e adicione informações do item.</p>
+            </button>
+        </nav>
+
+        <!-- Área principal onde o conteúdo das telas é renderizado -->
+        <main class="content-panel" id="contentPanel" aria-live="polite"></main>
+
+        <!-- Botão de reset geral do sistema -->
+        <div class="footer-actions">
+            <button class="danger-btn" id="btnResetarDados" type="button">Resetar dados</button>
+        </div>
+    </div>
+
+    <script>
+        const ESTOQUE_KEY = 'estoque-itens';
+        const STORAGE_KEY = 'estoque-pedidos';
+
+        const estoquePadrao = [
+            { codigo: 'INV-001', produto: 'Caixa de papelão', categoria: 'Embalagem', quantidade: 120, local: 'Setor A', valor: 18.5 },
+            { codigo: 'INV-002', produto: 'Fita isolante', categoria: 'Material elétrico', quantidade: 48, local: 'Setor B', valor: 12.75 },
+            { codigo: 'INV-003', produto: 'Palete de madeira', categoria: 'Logística', quantidade: 18, local: 'Depósito 2', valor: 86.4 },
+            { codigo: 'INV-004', produto: 'Rolo de plástico', categoria: 'Proteção', quantidade: 84, local: 'Setor C', valor: 24.9 },
+            { codigo: 'INV-005', produto: 'Fita métrica', categoria: 'Ferramentas', quantidade: 36, local: 'Setor D', valor: 32.1 }
+        ];
+
+        function carregarEstoque() {
+            try {
+                const salvo = JSON.parse(localStorage.getItem(ESTOQUE_KEY));
+                if (Array.isArray(salvo)) {
+                    return salvo;
+                }
+
+                return JSON.parse(JSON.stringify(estoquePadrao));
+            } catch {
+                return JSON.parse(JSON.stringify(estoquePadrao));
+            }
+        }
+
+        function salvarEstoque() {
+            try {
+                localStorage.setItem(ESTOQUE_KEY, JSON.stringify(estoque));
+            } catch {
+                console.warn('Não foi possível salvar o estoque no navegador.');
+            }
+        }
+
+        const estoque = carregarEstoque();
+
+        function formatarCodigoProduto(numero) {
+            return `INV-${String(numero).padStart(3, '0')}`;
+        }
+
+        function extrairNumeroCodigo(codigo) {
+            const texto = String(codigo || '');
+            const match = texto.match(/\d+/);
+            const numero = match ? Number(match[0]) : 0;
+            return Number.isFinite(numero) ? numero : 0;
+        }
+
+        function normalizarCodigosEstoque() {
+            const itensOrdenados = [...estoque]
+                .map(item => ({ ...item }))
+                .sort((a, b) => {
+                    const numeroA = extrairNumeroCodigo(a.codigo);
+                    const numeroB = extrairNumeroCodigo(b.codigo);
+
+                    const temNumeroA = numeroA > 0;
+                    const temNumeroB = numeroB > 0;
+
+                    if (temNumeroA && temNumeroB) return numeroA - numeroB;
+                    if (temNumeroA !== temNumeroB) return temNumeroA ? -1 : 1;
+                    return String(a.produto || '').localeCompare(String(b.produto || ''));
+                })
+                .map((item, index) => ({
+                    ...item,
+                    codigo: formatarCodigoProduto(index + 1)
+                }));
+
+            estoque.splice(0, estoque.length, ...itensOrdenados);
+            return estoque.length;
+        }
+
+        function gerarProximoCodigoProduto() {
+            if (!Array.isArray(estoque) || !estoque.length) return 'INV-001';
+
+            const maiorCodigo = estoque.reduce((maior, item) => {
+                return Math.max(maior, extrairNumeroCodigo(item.codigo));
+            }, 0);
+
+            return formatarCodigoProduto(maiorCodigo + 1);
+        }
+
+        normalizarCodigosEstoque();
+        salvarEstoque();
+
+        const estadoPadrao = {
+            nextPedidoId: 2,
+            pedidos: [
+                {
+                    id: 1,
+                    status: 'Pendente',
+                    itens: [
+                        { codigo: 'INV-002', produto: 'Fita isolante', quantidade: 12, valor: 12.75, status: 'em_separacao' },
+                        { codigo: 'INV-004', produto: 'Rolo de plástico', quantidade: 18, valor: 24.9, status: 'conferido' }
+                    ]
+                }
+            ]
+        };
+
+        function carregarEstado() {
+            try {
+                const salvo = JSON.parse(localStorage.getItem(STORAGE_KEY));
+                if (!salvo) return JSON.parse(JSON.stringify(estadoPadrao));
+
+                return {
+                    nextPedidoId: Number(salvo.nextPedidoId || 1),
+                    pedidos: Array.isArray(salvo.pedidos) ? salvo.pedidos : []
+                };
+            } catch {
+                return JSON.parse(JSON.stringify(estadoPadrao));
+            }
+        }
+
+        function salvarEstado() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
+            } catch {
+                console.warn('Não foi possível salvar os pedidos no navegador.');
+            }
+        }
+
+        function resetarDados() {
+            const confirmar = window.confirm('Tem certeza que deseja resetar todos os dados? Isso apagará estoque e pedidos salvos.');
+            if (!confirmar) return;
+
+            const estoqueResetado = [];
+            const estadoResetado = {
+                nextPedidoId: 1,
+                pedidos: []
+            };
+
+            localStorage.setItem(ESTOQUE_KEY, JSON.stringify(estoqueResetado));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(estadoResetado));
+
+            window.location.reload();
+        }
+
+        const estado = carregarEstado();
+
+        function normalizarCodigosPedidos() {
+            estado.pedidos = (estado.pedidos || []).map(pedido => ({
+                ...pedido,
+                itens: (pedido.itens || []).map(item => {
+                    const produtoNoEstoque = estoque.find(produto => produto.produto === item.produto);
+                    return {
+                        ...item,
+                        codigo: produtoNoEstoque ? produtoNoEstoque.codigo : formatarCodigoProduto(extrairNumeroCodigo(item.codigo) || 1)
+                    };
+                })
+            }));
+        }
+
+        normalizarCodigosPedidos();
+        salvarEstado();
+
+        const panel = document.getElementById('contentPanel');
+        const cards = document.querySelectorAll('.nav-card');
+
+        function formatarMoeda(valor) {
+            return Number(valor || 0).toLocaleString('pt-BR', {
+                style: 'currency',
+                currency: 'BRL'
+            });
+        }
+
+        function obterStatusEstoque(quantidade) {
+            if (quantidade <= 0) {
+                return { texto: 'Esgotado', classe: 'danger' };
+            }
+
+            if (quantidade < 20) {
+                return { texto: 'Baixo nível', classe: 'alert' };
+            }
+
+            return { texto: 'Disponível', classe: 'ok' };
+        }
+
+        function gerarDadosVendas() {
+            const pedidosOrdenados = [...estado.pedidos].slice(0, 6).reverse();
+
+            return pedidosOrdenados.map((pedido, index) => {
+                const totalReceita = pedido.itens.reduce((soma, item) => {
+                    const valorUnitario = Number(item.valor || 0);
+                    const quantidade = Number(item.quantidade || 0);
+                    return soma + (valorUnitario * quantidade);
+                }, 0);
+
+                return {
+                    label: `#${pedido.id}`,
+                    valor: totalReceita,
+                    status: pedido.status,
+                    ordem: index + 1
+                };
+            });
+        }
+
+        function gerarBarrasVendas(valores) {
+            const max = Math.max(...valores, 1);
+            return valores.map((valor, index) => {
+                const altura = Math.max((valor / max) * 100, 8);
+                return `
+                    <div class="mini-bar-group" title="Pedido ${index + 1}: ${formatarMoeda(valor)}">
+                        <span class="mini-bar-value">${formatarMoeda(valor).replace('R$ ', '')}</span>
+                        <div class="mini-bar" style="height: ${altura}%"></div>
+                        <span class="mini-bar-label">#${index + 1}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderSection(key) {
+            cards.forEach(card => {
+                card.classList.toggle('active', card.dataset.section === key);
+            });
+
+            if (key === 'painel') {
+                const pendentes = estado.pedidos.filter(pedido => pedido.status !== 'Concluído');
+                const concluidos = estado.pedidos.filter(pedido => pedido.status === 'Concluído');
+                const totalItens = estado.pedidos.reduce((soma, pedido) => soma + pedido.itens.length, 0);
+
+                panel.innerHTML = `
+                    <div class="section-header">
+                        <h3>Painel geral</h3>
+                        <span class="badge blue">Resumo</span>
+                    </div>
+
+                    <div class="resumo-pedidos">
+                        <div class="resumo-box blue">
+                            <span class="resumo-label">Pedidos pendentes</span>
+                            <strong>${pendentes.length}</strong>
+                        </div>
+                        <div class="resumo-box green">
+                            <span class="resumo-label">Pedidos concluídos</span>
+                            <strong>${concluidos.length}</strong>
+                        </div>
+                        <div class="resumo-box blue">
+                            <span class="resumo-label">Total de itens</span>
+                            <strong>${totalItens}</strong>
+                        </div>
+                        <div class="resumo-box green">
+                            <span class="resumo-label">Último pedido</span>
+                            <strong>${estado.pedidos[0] ? `#${estado.pedidos[0].id}` : '—'}</strong>
+                        </div>
+                    </div>
+
+                    <div class="list">
+                        <section>
+                            <h4>Pedidos recentes</h4>
+                            ${estado.pedidos.length ? estado.pedidos.slice(0, 5).map(pedido => `
+                                <div class="pedido-card ${pedido.status === 'Concluído' ? 'concluido' : ''}">
+                                    <div class="pedido-header">
+                                        <div>
+                                            <strong>Pedido #${pedido.id}</strong>
+                                            <span class="muted">${pedido.itens.length} item(ns)</span>
+                                        </div>
+                                        <span class="badge ${pedido.status === 'Concluído' ? 'green' : 'orange'}">${pedido.status}</span>
+                                    </div>
+                                    <div class="pedido-itens">
+                                        ${pedido.itens.map((item, index) => `
+                                            <div class="item-row">
+                                                <div class="item-left">
+                                                    <div class="mini-badge">${index + 1}</div>
+                                                    <div>
+                                                        <strong>${item.produto}</strong>
+                                                        <span class="muted">${item.codigo} • ${item.quantidade} un.</span>
+                                                    </div>
+                                                </div>
+                                                <span class="status ${item.status === 'conferido' ? 'ok' : 'alert'}">${item.status === 'conferido' ? 'Conferido' : 'Em separação'}</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            `).join('') : '<p class="empty-state">Nenhum pedido registrado ainda.</p>'}
+                        </section>
+                    </div>
+                `;
+                return;
+            }
+
+            if (key === 'vendas') {
+                const pendentes = estado.pedidos.filter(pedido => pedido.status !== 'Concluído');
+                const concluidos = estado.pedidos.filter(pedido => pedido.status === 'Concluído');
+                const vendas = gerarDadosVendas();
+                const valores = vendas.map(item => item.valor);
+                const barras = gerarBarrasVendas(valores);
+                const totalVendido = vendas.reduce((soma, item) => soma + item.valor, 0);
+                const percentualConcluido = estado.pedidos.length ? (concluidos.length / estado.pedidos.length) * 100 : 0;
+                const percentualPendentes = estado.pedidos.length ? (pendentes.length / estado.pedidos.length) * 100 : 0;
+
+                panel.innerHTML = `
+                    <div class="section-header">
+                        <h3>Resumo de vendas</h3>
+                        <span class="badge green">Gráficos</span>
+                    </div>
+
+                    <div class="resumo-pedidos">
+                        <div class="resumo-box blue">
+                            <span class="resumo-label">Total vendido</span>
+                            <strong>${formatarMoeda(totalVendido)}</strong>
+                        </div>
+                        <div class="resumo-box green">
+                            <span class="resumo-label">Pedidos concluídos</span>
+                            <strong>${concluidos.length}</strong>
+                        </div>
+                    </div>
+
+                    <div class="chart-grid">
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <h4>Volume por pedido</h4>
+                            </div>
+                            <div class="bar-chart">
+                                ${vendas.map(item => `
+                                    <div class="bar-column" title="${item.label}: ${formatarMoeda(item.valor)}">
+                                        <span class="bar-value">${formatarMoeda(item.valor).replace('R$ ', '')}</span>
+                                        <div class="bar-fill" style="height: ${(item.valor / Math.max(...valores, 1)) * 100}%"></div>
+                                        <span class="bar-label">${item.label}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <h4>Status dos pedidos</h4>
+                            </div>
+                            <div class="donut-wrap">
+                                <div class="donut-chart" style="background: conic-gradient(#22c55e 0 ${percentualConcluido}%, #60a5fa ${percentualConcluido}% ${percentualConcluido + percentualPendentes}% , #e2e8f0 ${percentualConcluido + percentualPendentes}% 100%);">
+                                    <div class="donut-center">
+                                        <strong>${Math.round(percentualConcluido)}%</strong>
+                                        <span>Concluído</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="legend">
+                                <div class="legend-item"><span class="dot green"></span> Concluídos</div>
+                                <div class="legend-item"><span class="dot blue"></span> Pendentes</div>
+                            </div>
+                        </div>
+
+                        <div class="chart-card wide">
+                            <div class="chart-header">
+                                <h4>Evolução dos itens</h4>
+                            </div>
+                            <div class="mini-bar-chart">
+                                ${barras}
+                            </div>
+                            <div class="axis-labels">
+                                ${vendas.map(item => `<span>${item.label}</span>`).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            if (key === 'inventario') {
+                const categorias = ['Embalagem', 'Material elétrico', 'Logística', 'Proteção', 'Ferramentas'];
+
+                panel.innerHTML = `
+                    <div class="section-header">
+                        <h3>Inventário</h3>
+                        <span class="badge blue">${estoque.length} itens</span>
+                    </div>
+                    <div class="inventory-table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Produto</th>
+                                    <th>Categoria</th>
+                                    <th>Quantidade</th>
+                                    <th>Local</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${estoque.map((item, index) => {
+                                    const status = obterStatusEstoque(Number(item.quantidade || 0));
+                                    return `
+                                        <tr>
+                                            <td><span class="inventory-readonly">${item.codigo}</span></td>
+                                            <td><span class="inventory-readonly">${item.produto}</span></td>
+                                            <td>
+                                                <select class="inventory-input" data-index="${index}" data-field="categoria">
+                                                    ${categorias.map(categoria => `
+                                                        <option value="${categoria}" ${categoria === item.categoria ? 'selected' : ''}>${categoria}</option>
+                                                    `).join('')}
+                                                </select>
+                                            </td>
+                                            <td><input class="inventory-input" type="number" min="0" data-index="${index}" data-field="quantidade" value="${item.quantidade}" /></td>
+                                            <td><input class="inventory-input" type="text" data-index="${index}" data-field="local" value="${item.local}" /></td>
+                                            <td><span class="status ${status.classe}">${status.texto}</span></td>
+                                            <td><button class="primary-btn small-btn save-item-btn" type="button" data-index="${index}">Salvar</button></td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+
+                document.querySelectorAll('.save-item-btn').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const index = Number(button.dataset.index);
+                        const linha = button.closest('tr');
+                        const codigo = estoque[index].codigo;
+                        const produto = estoque[index].produto;
+                        const categoria = linha.querySelector('[data-field="categoria"]').value;
+                        const quantidade = Number(linha.querySelector('[data-field="quantidade"]').value || 0);
+                        const local = linha.querySelector('[data-field="local"]').value.trim();
+
+                        if (!codigo || !produto || !local) {
+                            alert('Preencha local para salvar a alteração.');
+                            return;
+                        }
+
+                        estoque[index] = {
+                            ...estoque[index],
+                            codigo,
+                            produto,
+                            categoria,
+                            quantidade,
+                            local,
+                            valor: Number(estoque[index].valor || 0)
+                        };
+
+                        salvarEstoque();
+                        renderSection('inventario');
+                    });
+                });
+                return;
+            }
+
+            if (key === 'venda') {
+                panel.innerHTML = `
+                    <div class="section-header">
+                        <h3>Venda</h3>
+                        <span class="badge green">Selecionar itens</span>
+                    </div>
+                    <div class="inventory-table-wrap sales-table-wrap">
+                        <table class="sales-table">
+                            <thead>
+                                <tr>
+                                    <th>Selecionar</th>
+                                    <th>Produto</th>
+                                    <th>Categoria</th>
+                                    <th>Disponível</th>
+                                    <th>Valor</th>
+                                    <th>Quantidade</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${estoque.map(item => `
+                                    <tr>
+                                        <td><div class="checkbox-cell"><input type="checkbox" class="item-check" data-codigo="${item.codigo}" /></div></td>
+                                        <td><span class="inventory-readonly">${item.produto}</span></td>
+                                        <td><span class="inventory-readonly">${item.categoria}</span></td>
+                                        <td><span class="inventory-readonly">${item.quantidade}</span></td>
+                                        <td><span class="inventory-readonly">${formatarMoeda(item.valor || 0)}</span></td>
+                                        <td><input type="number" class="qty-input" data-codigo="${item.codigo}" min="0" max="${item.quantidade}" value="0" /></td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="actions">
+                        <button class="primary-btn" id="btnEnviarConferencia" type="button">Enviar para conferência</button>
+                    </div>
+                `;
+
+                document.getElementById('btnEnviarConferencia').addEventListener('click', () => {
+                    const itens = [];
+
+                    document.querySelectorAll('.item-check:checked').forEach(checkbox => {
+                        const codigo = checkbox.dataset.codigo;
+                        const item = estoque.find(produto => produto.codigo === codigo);
+                        const input = document.querySelector(`.qty-input[data-codigo="${codigo}"]`);
+                        const quantidade = Number(input.value || 0);
+
+                        if (item && quantidade > 0) {
+                            itens.push({
+                                codigo: item.codigo,
+                                produto: item.produto,
+                                quantidade,
+                                valor: Number(item.valor || 0),
+                                status: 'em_separacao'
+                            });
+                        }
+                    });
+
+                    if (!itens.length) {
+                        alert('Selecione pelo menos um item e informe a quantidade.');
+                        return;
+                    }
+
+                    const novoPedido = {
+                        id: estado.nextPedidoId,
+                        status: 'Pendente',
+                        itens: itens.map(item => ({ ...item }))
+                    };
+
+                    estado.nextPedidoId += 1;
+                    estado.pedidos.unshift(novoPedido);
+                    salvarEstado();
+                    renderSection('conferencia');
+                });
+                return;
+            }
+
+            if (key === 'conferencia') {
+                const pedidos = estado.pedidos.length ? estado.pedidos : [
+                    {
+                        id: 1,
+                        status: 'Pendente',
+                        itens: [
+                            { codigo: 'INV-002', produto: 'Fita isolante', quantidade: 12, status: 'em_separacao' },
+                            { codigo: 'INV-004', produto: 'Rolo de plástico', quantidade: 18, status: 'conferido' }
+                        ]
+                    }
+                ];
+
+                const pendentes = pedidos.filter(pedido => pedido.status !== 'Concluído');
+                const concluido = pedidos.filter(pedido => pedido.status === 'Concluído');
+
+                panel.innerHTML = `
+                    <div class="section-header">
+                        <h3>Conferência</h3>
+                        <span class="badge orange">${pendentes.length} pendente(s)</span>
+                    </div>
+
+                    <div class="resumo-pedidos">
+                        <div class="resumo-box blue">
+                            <span class="resumo-label">Pendentes</span>
+                            <strong>${pendentes.length}</strong>
+                        </div>
+                        <div class="resumo-box green">
+                            <span class="resumo-label">Concluídos</span>
+                            <strong>${concluido.length}</strong>
+                        </div>
+                    </div>
+
+                    <div class="list">
+                        <section>
+                            <h4>Pedidos pendentes</h4>
+                            ${pendentes.length ? pendentes.map(pedido => {
+                                const totalItens = pedido.itens.length;
+                                const statusPedido = pedido.status || 'Pendente';
+
+                                return `
+                                    <div class="pedido-card">
+                                        <div class="pedido-header">
+                                            <div>
+                                                <strong>Pedido #${pedido.id}</strong>
+                                                <span class="muted">${totalItens} item(ns)</span>
+                                            </div>
+                                            <span class="badge orange">${statusPedido}</span>
+                                        </div>
+
+                                        <div class="pedido-itens">
+                                            ${pedido.itens.map((item, index) => `
+                                                <div class="item-row">
+                                                    <div class="item-left">
+                                                        <div class="mini-badge">${index + 1}</div>
+                                                        <div>
+                                                            <strong>${item.produto}</strong>
+                                                            <span class="muted">${item.codigo} • Quantidade: ${item.quantidade}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="status-actions">
+                                                        <button class="status-btn ${item.status === 'em_separacao' ? 'active' : ''}" data-pedido-id="${pedido.id}" data-codigo="${item.codigo}" data-status="em_separacao" type="button">Em separação</button>
+                                                        <button class="status-btn ${item.status === 'conferido' ? 'active' : ''}" data-pedido-id="${pedido.id}" data-codigo="${item.codigo}" data-status="conferido" type="button">Conferido</button>
+                                                    </div>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+
+                                        <div class="pedido-actions">
+                                            <button class="primary-btn secondary" data-pedido-id="${pedido.id}" type="button">
+                                                Finalizar pedido
+                                            </button>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('') : '<p class="empty-state">Nenhum pedido pendente no momento.</p>'}
+                        </section>
+
+                        <section>
+                            <h4>Pedidos concluídos</h4>
+                            ${concluido.length ? concluido.map(pedido => `
+                                <div class="pedido-card concluido">
+                                    <div class="pedido-header">
+                                        <div>
+                                            <strong>Pedido #${pedido.id}</strong>
+                                            <span class="muted">${pedido.itens.length} item(ns)</span>
+                                        </div>
+                                        <span class="badge green">Concluído</span>
+                                    </div>
+                                    <div class="pedido-itens">
+                                        ${pedido.itens.map((item, index) => `
+                                            <div class="item-row">
+                                                <div class="item-left">
+                                                    <div class="mini-badge">${index + 1}</div>
+                                                    <div>
+                                                        <strong>${item.produto}</strong>
+                                                        <span class="muted">${item.codigo} • Quantidade: ${item.quantidade}</span>
+                                                    </div>
+                                                </div>
+                                                <span class="status ok">Conferido</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            `).join('') : '<p class="empty-state">Nenhum pedido concluído ainda.</p>'}
+                        </section>
+                    </div>
+                `;
+
+                document.querySelectorAll('.status-btn').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const pedidoId = Number(button.dataset.pedidoId);
+                        const codigo = button.dataset.codigo;
+                        const status = button.dataset.status;
+
+                        const pedidoAtual = estado.pedidos.find(pedido => pedido.id === pedidoId);
+                        if (!pedidoAtual) return;
+
+                        pedidoAtual.itens = pedidoAtual.itens.map(item => {
+                            if (item.codigo === codigo) {
+                                return { ...item, status };
+                            }
+                            return item;
+                        });
+
+                        pedidoAtual.status = 'Pendente';
+                        salvarEstado();
+                        renderSection('conferencia');
+                    });
+                });
+
+                document.querySelectorAll('.secondary').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const pedidoId = Number(button.dataset.pedidoId);
+                        const pedidoAtual = estado.pedidos.find(pedido => pedido.id === pedidoId);
+                        if (!pedidoAtual) return;
+
+                        pedidoAtual.status = 'Concluído';
+                        pedidoAtual.itens = pedidoAtual.itens.map(item => ({ ...item, status: 'conferido' }));
+                        salvarEstado();
+                        renderSection('conferencia');
+                    });
+                });
+                return;
+            }
+
+            if (key === 'cadastro') {
+                panel.innerHTML = `
+                    <div class="section-header">
+                        <h3>Cadastro</h3>
+                        <span class="badge green">Novo item</span>
+                    </div>
+                    <form>
+                        <div class="field full">
+                            <label for="nome">Nome do item</label>
+                            <input id="nome" type="text" placeholder="Ex: Caixa térmica" />
+                        </div>
+
+                        <div class="field">
+                            <label for="categoria">Categoria</label>
+                            <select id="categoria">
+                                <option>Embalagem</option>
+                                <option>Material elétrico</option>
+                                <option>Logística</option>
+                                <option>Proteção</option>
+                            </select>
+                        </div>
+
+                        <div class="field">
+                            <label for="valor">Valor do produto</label>
+                            <input id="valor" type="number" min="0" step="0.01" placeholder="0.00" />
+                        </div>
+
+                        <div class="field">
+                            <label for="quantidade">Quantidade</label>
+                            <input id="quantidade" type="number" placeholder="0" />
+                        </div>
+
+                        <div class="field full">
+                            <label for="local">Local de armazenamento</label>
+                            <input id="local" type="text" placeholder="Ex: Depósito central" />
+                        </div>
+
+                        <div class="actions">
+                            <button class="primary-btn" type="submit">Salvar item</button>
+                        </div>
+                    </form>
+                `;
+
+                document.querySelector('form').addEventListener('submit', (event) => {
+                    event.preventDefault();
+
+                    const nome = document.getElementById('nome').value.trim();
+                    const categoria = document.getElementById('categoria').value;
+                    const valor = Number(document.getElementById('valor').value || 0);
+                    const quantidade = Number(document.getElementById('quantidade').value || 0);
+                    const local = document.getElementById('local').value.trim();
+
+                    if (!nome || !local) {
+                        alert('Preencha nome e local do armazenamento.');
+                        return;
+                    }
+
+                    const codigo = gerarProximoCodigoProduto();
+
+                    estoque.push({
+                        codigo,
+                        produto: nome,
+                        categoria,
+                        quantidade,
+                        local,
+                        valor
+                    });
+
+                    salvarEstoque();
+                    alert(`Item cadastrado com sucesso! Código gerado: ${codigo}`);
+                    renderSection('inventario');
+                });
+            }
+        }
+
+        cards.forEach(card => {
+            card.addEventListener('click', () => renderSection(card.dataset.section));
+        });
+
+        document.getElementById('btnResetarDados').addEventListener('click', resetarDados);
+
+        renderSection('painel');
+    </script>
+</body>
+</html>
