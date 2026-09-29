@@ -239,6 +239,15 @@ th:nth-child(5), td:nth-child(5) { width: 15%; }
 th:nth-child(6), td:nth-child(6) { width: 14%; }
 th:nth-child(7), td:nth-child(7) { width: 11%; text-align: center; }
 
+.inventory-stock-table th:nth-child(1), .inventory-stock-table td:nth-child(1) { width: 11%; }
+.inventory-stock-table th:nth-child(2), .inventory-stock-table td:nth-child(2) { width: 16%; }
+.inventory-stock-table th:nth-child(3), .inventory-stock-table td:nth-child(3) { width: 14%; }
+.inventory-stock-table th:nth-child(4), .inventory-stock-table td:nth-child(4) { width: 12%; }
+.inventory-stock-table th:nth-child(5), .inventory-stock-table td:nth-child(5) { width: 14%; }
+.inventory-stock-table th:nth-child(6), .inventory-stock-table td:nth-child(6) { width: 12%; }
+.inventory-stock-table th:nth-child(7), .inventory-stock-table td:nth-child(7) { width: 11%; }
+.inventory-stock-table th:nth-child(8), .inventory-stock-table td:nth-child(8) { width: 10%; }
+
 th:nth-child(1), td:nth-child(1),
 th:nth-child(2), td:nth-child(2),
 th:nth-child(3), td:nth-child(3),

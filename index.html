@@ -410,7 +410,7 @@
                         <span class="badge blue">${estoque.length} itens</span>
                     </div>
                     <div class="inventory-table-wrap">
-                        <table>
+                        <table class="inventory-stock-table">
                             <thead>
                                 <tr>
                                     <th>Código</th>
@@ -418,6 +418,7 @@
                                     <th>Categoria</th>
                                     <th>Quantidade</th>
                                     <th>Local</th>
+                                    <th>Valor unitário</th>
                                     <th>Status</th>
                                     <th>Ações</th>
                                 </tr>
@@ -438,6 +439,7 @@
                                             </td>
                                             <td><input class="inventory-input" type="number" min="0" data-index="${index}" data-field="quantidade" value="${item.quantidade}" /></td>
                                             <td><input class="inventory-input" type="text" data-index="${index}" data-field="local" value="${item.local}" /></td>
+                                            <td><span class="inventory-readonly">${formatarMoeda(item.valor || 0)}</span></td>
                                             <td><span class="status ${status.classe}">${status.texto}</span></td>
                                             <td class="inventory-actions">
                                                 <div class="inventory-row-actions">
@@ -540,6 +542,7 @@
 
                 document.getElementById('btnEnviarConferencia').addEventListener('click', () => {
                     const itens = [];
+                    let estoqueInsuficiente = false;
 
                     document.querySelectorAll('.item-check:checked').forEach(checkbox => {
                         const codigo = checkbox.dataset.codigo;
@@ -548,6 +551,13 @@
                         const quantidade = Number(input.value || 0);
 
                         if (item && quantidade > 0) {
+                            const quantidadeDisponivel = Number(item.quantidade || 0);
+                            if (quantidade > quantidadeDisponivel) {
+                                alert(`Quantidade solicitada de "${item.produto}" (${quantidade}) excede o estoque disponível (${quantidadeDisponivel}).`);
+                                estoqueInsuficiente = true;
+                                return;
+                            }
+
                             itens.push({
                                 codigo: item.codigo,
                                 produto: item.produto,
@@ -557,6 +567,8 @@
                             });
                         }
                     });
+
+                    if (estoqueInsuficiente) return;
 
                     if (!itens.length) {
                         alert('Selecione pelo menos um item e informe a quantidade.');
@@ -569,8 +581,14 @@
                         itens: itens.map(item => ({ ...item }))
                     };
 
+                    itens.forEach(itemPedido => {
+                        const itemEstoque = estoque.find(item => item.codigo === itemPedido.codigo);
+                        itemEstoque.quantidade = Number(itemEstoque.quantidade || 0) - itemPedido.quantidade;
+                    });
+
                     estado.nextPedidoId += 1;
                     estado.pedidos.unshift(novoPedido);
+                    salvarEstoque();
                     salvarEstado();
                     renderSection('conferencia');
                 });
